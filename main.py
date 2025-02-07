@@ -10,7 +10,10 @@ import os
 app = FastAPI(title="Music Artists API")
 
 # Get DATABASE_URL from environment variable (Railway sets this automatically)
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/artists")
+DATABASE_URL = os.getenv("DATABASE_URL", "test")
+
+print("--------DATABASE-URL-----------")
+print(DATABASE_URL)
 
 # SQLAlchemy setup
 engine = create_engine(DATABASE_URL)
