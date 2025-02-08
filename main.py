@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from sqlalchemy import create_engine, Column, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from pydantic import BaseModel
 from typing import List
 import os
@@ -89,4 +88,4 @@ async def add_artist(artist: Artist):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
