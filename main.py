@@ -1,8 +1,12 @@
-from fastapi import FastAPI
-from sqlalchemy import create_engine, Column, String
+from fastapi import FastAPI, HTTPException, Header
+from sqlalchemy import create_engine, Column, String, Integer
 from sqlalchemy.orm import declarative_base, sessionmaker
 from pydantic import BaseModel
 from typing import List
+import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from typing import Optional
 import os
 
 # Initialize FastAPI app
@@ -25,12 +29,16 @@ class ArtistDB(Base):
     name = Column(String, primary_key=True)
     genre = Column(String)
     description = Column(String)
+    popularity = Column(Integer)
+    demo_url = Column(String)
 
 # Pydantic model for API
 class Artist(BaseModel):
     name: str
     genre: str
     description: str
+    popularity: int
+    demo_url: str
 
     class Config:
         orm_mode = True
@@ -38,20 +46,30 @@ class Artist(BaseModel):
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-# Initialize database with sample data
 def init_db():
     db = SessionLocal()
     sample_artists = [
         ArtistDB(
-            name="The Beatles",
-            genre="Rock",
-            description="Legendary British rock band from Liverpool"
+            name="Twig Lake",
+            genre="Indie Rock",
+            description="Up and coming singer-songwriter project focused on introspective lyrics and catchy melodies",
+            popularity=80,
+            demo_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         ),
         ArtistDB(
-            name="Miles Davis",
+            name="Fling",
             genre="Jazz",
-            description="Influential jazz trumpeter and composer"
-        )
+            description="New age jazz punk band with a focus on improvisation and experimentation",
+            popularity=65,
+            demo_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        ),
+        ArtistDB(
+            name="The Daisies",
+            genre="Pop",
+            description="Pop band with a focus on catchy hooks and danceable beats",
+            popularity=90,
+            demo_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        ),
     ]
     
     for artist in sample_artists:
@@ -68,24 +86,54 @@ def init_db():
 async def startup_event():
     init_db()
 
-# GET endpoint to retrieve all artists
-@app.get("/artists", response_model=List[Artist])
-async def get_artists():
-    db = SessionLocal()
-    artists = db.query(ArtistDB).all()
-    db.close()
-    return artists
 
-# Optional: Add an artist (for testing)
-@app.post("/artists")
-async def add_artist(artist: Artist):
-    db = SessionLocal()
-    db_artist = ArtistDB(**artist.dict())
-    db.add(db_artist)
-    db.commit()
-    db.close()
-    return {"message": "Artist added successfully"}
+app = FastAPI()
+
+def get_db_connection():
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    return psycopg2.connect(DATABASE_URL)
+
+# Keep the original endpoint for reference
+@app.get("/artists")
+async def get_artists():
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        cur.execute('SELECT * FROM artists')
+        artists = cur.fetchall()
+        return list(artists)
+    finally:
+        cur.close()
+        conn.close()
+
+# Updated endpoint that accepts genre in header
+@app.get("/artists/top")
+async def get_top_artist_by_genre(genre: Optional[str] = Header(None, alias="X-Genre")):
+    if not genre:
+        raise HTTPException(status_code=400, detail="Genre header (X-Genre) is required")
+    
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        cur.execute('''
+            SELECT * FROM artists 
+            WHERE LOWER(genre) = LOWER(%s)
+            ORDER BY popularity DESC 
+            LIMIT 1
+        ''', (genre,))
+        
+        artist = cur.fetchone()
+        if not artist:
+            raise HTTPException(status_code=404, detail=f"No artists found for genre: {genre}")
+        
+        return artist
+    finally:
+        cur.close()
+        conn.close()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    port = int(os.getenv("PORT", 3000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
